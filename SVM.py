@@ -7,7 +7,9 @@ Original file is located at
     https://colab.research.google.com/drive/1UcXMsOCCD9ooDaKwE3Uyz506HJ-hJnQS
 """
 
+import numpy as np
 from keras.datasets import mnist
+from sklearn.utils import shuffle
 (X_train, Y_train),(X_test, Y_test) = mnist.load_data()
 
 print(X_train.shape)
@@ -19,20 +21,140 @@ X_train_0_9 = {'0':[],'9':[]}
 Y_train_0_9 = {'0':[],'9':[]}
 for i in range(len(Y_train)):
   if Y_train[i] == 0:
-    X_train_0_9['0'].append(X_train[i])
-    Y_train_0_9['0'].append(0)
+    X_train_0_9['0'].append(X_train[i].reshape(-1,1))
+    Y_train_0_9['0'].append(-1)
   elif Y_train[i] == 9:
-    X_train_0_9['9'].append(X_train[i])
-    Y_train_0_9['9'].append(9)
+    X_train_0_9['9'].append(X_train[i].reshape(-1,1))
+    Y_train_0_9['9'].append(1)
+
 X_test_0_9 = {'0':[],'9':[]}
 Y_test_0_9 = {'0':[],'9':[]}
 for i in range(len(Y_test)):
   if Y_test[i] == 0:
-    X_test_0_9['0'].append(X_test[i])
-    Y_test_0_9['0'].append(0)
+    X_test_0_9['0'].append(X_test[i].reshape(-1,1))
+    Y_test_0_9['0'].append(-1)
   elif Y_test[i] == 9:
-    X_test_0_9['9'].append(X_test[i])
-    Y_test_0_9['9'].append(9)
+    X_test_0_9['9'].append(X_test[i].reshape(-1,1))
+    Y_test_0_9['9'].append(1)
+
+X_Train_0_9 = np.zeros((len(X_train_0_9['0'])+len(X_train_0_9['9']), 785))
+Y_Train_0_9 = np.array(Y_train_0_9['0']+ Y_train_0_9['9'])[:,np.newaxis]*1.
+X_Test_0_9 = np.zeros((len(X_test_0_9['0'])+len(X_test_0_9['9']), 785))
+Y_Test_0_9 = np.array(Y_test_0_9['0']+ Y_test_0_9['9'])[:,np.newaxis]*1.
+# print(X_Train_0_9)
+# print(Y_Train_0_9.astype(np.float32))
+np.random.seed(24)
+
+for i in range(X_Train_0_9.shape[0]):
+  if i <= len(X_train_0_9['0'])-1:
+    X_Train_0_9[i,0] = 1
+    X_Train_0_9[i,1:][np.newaxis] = (X_train_0_9['0'][i]*Y_train_0_9['0'][i]).T
+  elif i >= len(X_train_0_9['0']):
+    X_Train_0_9[i,0] = 1
+    X_Train_0_9[i,1:][np.newaxis] = (X_train_0_9['9'][i-len(X_train_0_9['0'])]*Y_train_0_9['9'][i-len(X_train_0_9['0'])]).T
+
+# np.random.shuffle(X_Train_0_9)
+# np.random.shuffle(Y_Train_0_9)
+
+# temp = list(zip(X_Train_0_9, Y_Train_0_9))
+# print(temp)
+# np.random.shuffle(temp)
+# X_Train_0_9, Y_Train_0_9 = zip(*temp)
+
+X_Train_0_9, Y_Train_0_9 = shuffle(X_Train_0_9, Y_Train_0_9)
+
+X_Train_0_9 = X_Train_0_9[:800,:]
+Y_Train_0_9 = Y_Train_0_9[:800,:]
+
+# from matplotlib import pyplot as plt
+# plt.imshow(X_Train_0_9[1].reshape(28,28), cmap='gray')
+# plt.show()
+# print(X_Train_0_9[5].reshape(28,28).shape)
+# print(Y_Train_0_9)
+
+for i in range(X_Test_0_9.shape[0]):
+  if i <= len(X_test_0_9['0'])-1:
+    X_Test_0_9[i,0] = 1
+    X_Test_0_9[i,1:][np.newaxis] = (X_test_0_9['0'][i]).T
+  elif i >= len(X_test_0_9['0']):
+    X_Test_0_9[i,0] = 1
+    X_Test_0_9[i,1:][np.newaxis] = (X_test_0_9['9'][i-len(X_test_0_9['0'])]).T
+
+# np.random.shuffle(X_Test_0_9)
+# np.random.shuffle(Y_Test_0_9)
+# X_Test_0_9 = X_Test_0_9[:500,:]
+# Y_Test_0_9 = Y_Test_0_9[:500,:]
+
+print(X_Train_0_9.shape)
+print(Y_Train_0_9.shape)
+
+print(X_Test_0_9.shape)
+print(Y_Test_0_9.shape)
+
+from cvxopt import matrix as cvxopt_matrix
+from cvxopt import solvers as cvxopt_solvers
+
+H = X_Train_0_9@X_Train_0_9.T
+m = X_Train_0_9.shape[0]
+
+#Converting into cvxopt format
+P = cvxopt_matrix(H)
+q = cvxopt_matrix(-np.ones((m, 1)))
+G = cvxopt_matrix(-np.eye(m))
+h = cvxopt_matrix(np.zeros(m))
+A = cvxopt_matrix(Y_Train_0_9.T)
+b = cvxopt_matrix(np.zeros(1))
+
+#Setting solver parameters (change default to decrease tolerance)
+# cvxopt_solvers.options['show_progress'] = False
+# cvxopt_solvers.options['abstol'] = 1e-10
+# cvxopt_solvers.options['reltol'] = 1e-10
+# cvxopt_solvers.options['feastol'] = 1e-10
+
+#Run solver
+sol = cvxopt_solvers.qp(P, q, G, h, A, b)
+alphas = np.array(sol['x'])
+
+print(alphas.shape)
+
+#w parameter in vectorized form
+w = ((alphas).T @ X_Train_0_9).T #.reshape(-1,1)
+print(w.shape)
+#Selecting the set of indices S corresponding to non zero parameters
+S = (alphas > 1e-4).flatten()
+
+#Computing b
+b = Y_Train_0_9[S] - np.dot(X_Train_0_9[S], w)
+
+# Display results
+print('Alphas = ',alphas[alphas > 1e-4])
+# print('w = ', w.flatten())
+print('b = ', b)
+y_test_hat = np.sign(X_Test_0_9@w)
+y_train_hat = np.sign(Y_Train_0_9*X_Train_0_9@w)
+train_accuracy = (np.sum(y_train_hat == Y_Train_0_9)/y_train_hat.shape[0])*100
+test_accuracy = (np.sum(y_test_hat == Y_Test_0_9)/y_test_hat.shape[0])*100
+print(train_accuracy)
+print(test_accuracy)
+
+print(y_test_hat)
+print(Y_Test_0_9)
+
+y_test_hat = np.sign(X_Test_0_9@w)
+accuracy = (np.sum(y_test_hat == Y_Test_0_9)/y_test_hat.shape[0])*100
+print(accuracy)
+
+(y_test_hat == Y_Test_0_9).flatten()
+
+#Display results
+# print('Alphas = ',alphas[alphas > 1e-4])
+print('Alphas = ',alphas[5111,:])
+# print('w = ', w.flatten())
+# print('b = ', b)
+
+print(w)
+
+np.sign(-0.5)
 
 print(len(X_train_0_9['0']))
 print(len(Y_train_0_9['9']))
@@ -40,8 +162,11 @@ print(len(X_test_0_9['0']))
 print(len(Y_test_0_9['9']))
 
 from matplotlib import pyplot as plt
+# plt.figure()
+# plt.imshow(X_train_0_9['9'][0],cmap='gray')
+# plt.show()
 plt.figure()
-plt.imshow(X_train_0_9['9'][0],cmap='gray')
+plt.imshow(X_Train_0_9[11110,:].reshape(28,28),cmap='gray')
 plt.show()
 
 from cvxopt import matrix, solvers
@@ -55,4 +180,279 @@ sol=solvers.qp(Q, p, G, h, A, b)
 print(sol['x'])
 
 print(Q)
+
+import matplotlib.pyplot as plt
+import numpy as np
+# np.random.seed(26)
+mean_0 = [-1, -1]
+mean_1 = [1, 1]
+cov = [[1, 0], [0, 10]]
+n = 3
+m_train = 100 #[2*n, 5*n, 10*n]
+# for m in m:
+y_train = np.zeros((m_train,1))
+x_train = np.zeros((m_train,n))
+# x_1 = np.zeros((m[2],n))
+for i in range(m_train):
+  y_train[i] = np.random.binomial(1, 0.5)
+  if y_train[i] == 0:
+    x_train[i,0] = 1
+    x_train[i,1:] = np.random.multivariate_normal(mean_0, cov)
+    y_train[i] = -1
+  else:
+    x_train[i,0] = 1
+    x_train[i,1:] = np.random.multivariate_normal(mean_1, cov)
+    y_train[i] = 1
+# print(x)
+# print(y)
+plt.figure()
+plt.scatter(x_train[:,1],x_train[:,2],c=y_train,marker='x')
+plt.show()
+
+# print(x_train[5])
+# print(y_train[5])
+X_Train = x_train*y_train
+# print(X_Train[5])
+
+m_test = 100
+y_test = np.zeros((m_test,1))
+x_test = np.zeros((m_test,n))
+for i in range(m_test):
+  y_test[i] = np.random.binomial(1, 0.5)
+  if y_test[i] == 0:
+    x_test[i,0] = 1
+    x_test[i,1:] = np.random.multivariate_normal(mean_0, cov)
+    y_test[i] = -1
+  else:
+    x_test[i,0] = 1
+    x_test[i,1:] = np.random.multivariate_normal(mean_1, cov)
+    y_test[i] = 1
+
+plt.figure()
+plt.scatter(x_test[:,1],x_test[:,2],c=y_test,marker='x')
+plt.show()
+
+from cvxopt import matrix as cvxopt_matrix
+from cvxopt import solvers as cvxopt_solvers
+
+H = X_Train@X_Train.T
+m = x_train.shape[0]
+
+kernel_type = 'rbf'
+#Converting into cvxopt format
+P = cvxopt_matrix(H)
+q = cvxopt_matrix(-np.ones((m, 1)))
+G = cvxopt_matrix(-np.eye(m))
+h = cvxopt_matrix(np.zeros(m))
+A = cvxopt_matrix(y_train.reshape(1,-1))
+b = cvxopt_matrix(np.zeros(1))
+
+#Setting solver parameters (change default to decrease tolerance)
+# cvxopt_solvers.options['show_progress'] = False
+# cvxopt_solvers.options['abstol'] = 1e-10
+# cvxopt_solvers.options['reltol'] = 1e-10
+# cvxopt_solvers.options['feastol'] = 1e-10
+
+#Run solver
+sol = cvxopt_solvers.qp(P, q, G, h, A, b)
+alphas = np.array(sol['x'])
+
+#w parameter in vectorized form
+w = ((y_train * alphas).T @ x_train).reshape(-1,1)
+
+#Selecting the set of indices S corresponding to non zero parameters
+S = (alphas > 1e-4).flatten()
+# print(S)
+# print(y_train[S])
+# print(x_train[S])
+#Computing b
+b = y_train[S] - np.dot(x_train[S], w)
+
+# Display results
+print('Alphas = ',alphas[alphas > 1e-4])
+# print('w = ', w.flatten())
+print('b = ', b)
+
+# def sigmoid(z):
+#   return 1/(1+np.exp(-z))
+
+y_train_hat = np.zeros((m_train,1))
+for i in range(m_train):
+  y_train_hat[i] = np.sign(x_train[i]@w + b[0])
+
+y_test_hat = np.zeros((m_test,1))
+for i in range(m_test):
+  y_test_hat[i] = np.sign(x_test[i]@w + b[0])
+
+train_accuracy = (np.sum(y_train_hat == y_train)/y_train_hat.shape[0])*100
+test_accuracy = (np.sum(y_test_hat == y_test)/y_test_hat.shape[0])*100
+print(train_accuracy)
+print(test_accuracy)
+
+print(alphas)
+
+
+
+import matplotlib.pyplot as plt
+import numpy as np
+# np.random.seed(26)
+mean_0 = [-1, -1]
+mean_1 = [1, 1]
+cov = [[1, 0], [0, 10]]
+l = 3
+m_train = 1000 #[2*n, 5*n, 10*n]
+# for m in m:
+y = np.zeros((m_train,1))
+x = np.zeros((m_train,l))
+# x_1 = np.zeros((m[2],n))
+for i in range(m_train):
+  y[i] = np.random.binomial(1, 0.5)
+  if y[i] == 0:
+    x[i,0] = 1
+    x[i,1:] = np.random.multivariate_normal(mean_0, cov)
+    # y[i] = -1
+  else:
+    x[i,0] = 1
+    x[i,1:] = np.random.multivariate_normal(mean_1, cov)
+    # y[i] = 1
+# print(x)
+# print(y)
+# plt.figure()
+# plt.scatter(x_train[:,1],x_train[:,2],c=y_train,marker='x')
+# plt.show()
+
+# print(x_train[5])
+# print(y_train[5])
+# X_Train = x_train*y_train
+# print(X_Train[5])
+
+m_test = 100
+y_test = np.zeros((m_test,1))
+x_test = np.zeros((m_test,l))
+for i in range(m_test):
+  y_test[i] = np.random.binomial(1, 0.5)
+  if y_test[i] == 0:
+    x_test[i,0] = 1
+    x_test[i,1:] = np.random.multivariate_normal(mean_0, cov)
+    # y_test[i] = -1
+  else:
+    x_test[i,0] = 1
+    x_test[i,1:] = np.random.multivariate_normal(mean_1, cov)
+    # y_test[i] = 1
+
+# plt.figure()
+# plt.scatter(x_test[:,1],x_test[:,2],c=y_test,marker='x')
+# plt.show()
+
+test_loss = []
+n = 100
+x_train = [x[0:n,:], x[0:3*n,:], x[0:5*n,:]]
+y_train = [y[0:n], y[0:3*n], y[0:5*n]]
+m_train = [x_train[0].shape[0], x_train[1].shape[0], x_train[2].shape[0]]
+# x_test = [x[n:,:], x[3*n:,:], x[10*n:,:]]
+# m_test = [x_test[0].shape[0], x_test[1].shape[0], x_test[2].shape[0]]
+# y_test = [y[n:], y[3*n:], y[10*n:]]
+# x_train = x[0:n,:]
+Kmax = 1000
+# x = np.concatenate((np.ones((m,1)), x),axis=1)
+c = 0.000000005
+eps = 1e-6
+par_est = np.zeros([3,1]) + 1e-3
+print(par_est)
+
+def sigmoid(z):
+  return 1/(1+np.exp(-z))
+
+def cl_accuracy(y, y_hat):
+ return (np.sum(y_hat == y)/y.shape[0])*100
+
+for j in range(len(m_train)):
+    stepsize = c/m_train[j]
+    loss = []
+    for i in range(0,Kmax):
+        par = par_est
+        # grad = 2*x_train[j].T@(x_train[j]@par-y_train[j])
+        y_train_hat = sigmoid(x_train[j]@par)
+        grad = (y_train_hat - y_train[j]).T@x_train[j]
+        par_est = par - stepsize*grad
+        loss.append(cl_accuracy(y_train[j],sigmoid(x_train[j]@par_est)))
+        # loss.append(np.linalg.norm(par-par_est)**2/np.linalg.norm(par)**2)
+        # if np.linalg.norm(par-par_est)**2/np.linalg.norm(par)**2<=eps:
+        #     print("optimal solution reached within " + str(i) + " iterations")
+        #     break
+
+    # test_loss.append(np.linalg.norm(y_test[j]-x_test[j]@par_est)/m_test[j])
+    test_loss.append(cl_accuracy(y_test,sigmoid(x_test@par_est)))
+    plt.figure()
+    plt.plot(np.arange(len(loss)),loss,label=str(m_train[j])+' samples')
+    plt.xlabel('Iterations')
+    plt.ylabel('Prediction Error')
+    plt.title('Prediction error on real data')
+    plt.legend()
+    # plt.savefig('./Real data.png')
+    plt.show()
+
+print(test_loss)
+print(par_est)
+
+def sigmoid(z):
+  return 1/(1+np.exp(-z))
+
+print(sigmoid(np.zeros((5,5))))
+
+np.random.seed(26)
+print(np.random.randn(2,4))
+print(np.random.normal(0,1,size=(2,4)))
+print(np.random.multivariate_normal([0,0],[[1,0],[0,1]],size=(2,4)))
+
+import matplotlib.pyplot as plt
+import numpy as np
+# np.random.seed(26)
+mean_0 = [-1, -1]
+mean_1 = [1, 1]
+cov = [[1, 0], [0, 10]]
+n = 3
+m_train = 100 #[2*n, 5*n, 10*n]
+# for m in m:
+y_train = np.zeros((m_train,1))
+x_train = np.zeros((m_train,n))
+# x_1 = np.zeros((m[2],n))
+for i in range(m_train):
+  y_train[i] = np.random.binomial(1, 0.5)
+  if y_train[i] == 0:
+    x_train[i,0] = 1
+    x_train[i,1:] = np.random.multivariate_normal(mean_0, cov)
+    y_train[i] = -1
+  else:
+    x_train[i,0] = 1
+    x_train[i,1:] = np.random.multivariate_normal(mean_1, cov)
+    y_train[i] = 1
+# print(x)
+# print(y)
+# plt.figure()
+# plt.scatter(x_train[:,1],x_train[:,2],c=y_train,marker='x')
+# plt.show()
+
+# print(x_train[5])
+# print(y_train[5])
+# X_Train = x_train*y_train
+# print(X_Train[5])
+
+m_test = 100
+y_test = np.zeros((m_test,1))
+x_test = np.zeros((m_test,n))
+for i in range(m_test):
+  y_test[i] = np.random.binomial(1, 0.5)
+  if y_test[i] == 0:
+    x_test[i,0] = 1
+    x_test[i,1:] = np.random.multivariate_normal(mean_0, cov)
+    y_test[i] = -1
+  else:
+    x_test[i,0] = 1
+    x_test[i,1:] = np.random.multivariate_normal(mean_1, cov)
+    y_test[i] = 1
+
+# plt.figure()
+# plt.scatter(x_test[:,1],x_test[:,2],c=y_test,marker='x')
+# plt.show()
 
