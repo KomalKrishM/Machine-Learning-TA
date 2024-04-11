@@ -10,6 +10,8 @@ Original file is located at
 import numpy as np
 from keras.datasets import mnist
 from sklearn.utils import shuffle
+
+##### Real data ######
 (X_train, Y_train),(X_test, Y_test) = mnist.load_data()
 
 print(X_train.shape)
@@ -144,42 +146,7 @@ y_test_hat = np.sign(X_Test_0_9@w)
 accuracy = (np.sum(y_test_hat == Y_Test_0_9)/y_test_hat.shape[0])*100
 print(accuracy)
 
-(y_test_hat == Y_Test_0_9).flatten()
-
-#Display results
-# print('Alphas = ',alphas[alphas > 1e-4])
-print('Alphas = ',alphas[5111,:])
-# print('w = ', w.flatten())
-# print('b = ', b)
-
-print(w)
-
-np.sign(-0.5)
-
-print(len(X_train_0_9['0']))
-print(len(Y_train_0_9['9']))
-print(len(X_test_0_9['0']))
-print(len(Y_test_0_9['9']))
-
-from matplotlib import pyplot as plt
-# plt.figure()
-# plt.imshow(X_train_0_9['9'][0],cmap='gray')
-# plt.show()
-plt.figure()
-plt.imshow(X_Train_0_9[11110,:].reshape(28,28),cmap='gray')
-plt.show()
-
-from cvxopt import matrix, solvers
-Q = 2*matrix([ [2, .5], [.5, 1] ])
-p = matrix([1.0, 1.0])
-G = matrix([[-1.0,0.0],[0.0,-1.0]])
-h = matrix([0.0,0.0])
-A = matrix([1.0, 1.0], (1,2))
-b = matrix(1.0)
-sol=solvers.qp(Q, p, G, h, A, b)
-print(sol['x'])
-
-print(Q)
+#### simulated data #####
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -273,9 +240,6 @@ print('Alphas = ',alphas[alphas > 1e-4])
 # print('w = ', w.flatten())
 print('b = ', b)
 
-# def sigmoid(z):
-#   return 1/(1+np.exp(-z))
-
 y_train_hat = np.zeros((m_train,1))
 for i in range(m_train):
   y_train_hat[i] = np.sign(x_train[i]@w + b[0])
@@ -288,110 +252,3 @@ train_accuracy = (np.sum(y_train_hat == y_train)/y_train_hat.shape[0])*100
 test_accuracy = (np.sum(y_test_hat == y_test)/y_test_hat.shape[0])*100
 print(train_accuracy)
 print(test_accuracy)
-
-print(alphas)
-
-
-
-import matplotlib.pyplot as plt
-import numpy as np
-# np.random.seed(26)
-mean_0 = [-1, -1]
-mean_1 = [1, 1]
-cov = [[1, 0], [0, 10]]
-l = 3
-m_train = 1000 #[2*n, 5*n, 10*n]
-# for m in m:
-y = np.zeros((m_train,1))
-x = np.zeros((m_train,l))
-# x_1 = np.zeros((m[2],n))
-for i in range(m_train):
-  y[i] = np.random.binomial(1, 0.5)
-  if y[i] == 0:
-    x[i,0] = 1
-    x[i,1:] = np.random.multivariate_normal(mean_0, cov)
-    # y[i] = -1
-  else:
-    x[i,0] = 1
-    x[i,1:] = np.random.multivariate_normal(mean_1, cov)
-    # y[i] = 1
-# print(x)
-# print(y)
-# plt.figure()
-# plt.scatter(x_train[:,1],x_train[:,2],c=y_train,marker='x')
-# plt.show()
-
-# print(x_train[5])
-# print(y_train[5])
-# X_Train = x_train*y_train
-# print(X_Train[5])
-
-m_test = 100
-y_test = np.zeros((m_test,1))
-x_test = np.zeros((m_test,l))
-for i in range(m_test):
-  y_test[i] = np.random.binomial(1, 0.5)
-  if y_test[i] == 0:
-    x_test[i,0] = 1
-    x_test[i,1:] = np.random.multivariate_normal(mean_0, cov)
-    # y_test[i] = -1
-  else:
-    x_test[i,0] = 1
-    x_test[i,1:] = np.random.multivariate_normal(mean_1, cov)
-    # y_test[i] = 1
-
-# plt.figure()
-# plt.scatter(x_test[:,1],x_test[:,2],c=y_test,marker='x')
-# plt.show()
-
-test_loss = []
-n = 100
-x_train = [x[0:n,:], x[0:3*n,:], x[0:5*n,:]]
-y_train = [y[0:n], y[0:3*n], y[0:5*n]]
-m_train = [x_train[0].shape[0], x_train[1].shape[0], x_train[2].shape[0]]
-# x_test = [x[n:,:], x[3*n:,:], x[10*n:,:]]
-# m_test = [x_test[0].shape[0], x_test[1].shape[0], x_test[2].shape[0]]
-# y_test = [y[n:], y[3*n:], y[10*n:]]
-# x_train = x[0:n,:]
-Kmax = 1000
-# x = np.concatenate((np.ones((m,1)), x),axis=1)
-c = 0.000000005
-eps = 1e-6
-par_est = np.zeros([3,1]) + 1e-3
-print(par_est)
-
-def sigmoid(z):
-  return 1/(1+np.exp(-z))
-
-def cl_accuracy(y, y_hat):
- return (np.sum(y_hat == y)/y.shape[0])*100
-
-for j in range(len(m_train)):
-    stepsize = c/m_train[j]
-    loss = []
-    for i in range(0,Kmax):
-        par = par_est
-        # grad = 2*x_train[j].T@(x_train[j]@par-y_train[j])
-        y_train_hat = sigmoid(x_train[j]@par)
-        grad = (y_train_hat - y_train[j]).T@x_train[j]
-        par_est = par - stepsize*grad
-        loss.append(cl_accuracy(y_train[j],sigmoid(x_train[j]@par_est)))
-        # loss.append(np.linalg.norm(par-par_est)**2/np.linalg.norm(par)**2)
-        # if np.linalg.norm(par-par_est)**2/np.linalg.norm(par)**2<=eps:
-        #     print("optimal solution reached within " + str(i) + " iterations")
-        #     break
-
-    # test_loss.append(np.linalg.norm(y_test[j]-x_test[j]@par_est)/m_test[j])
-    test_loss.append(cl_accuracy(y_test,sigmoid(x_test@par_est)))
-    plt.figure()
-    plt.plot(np.arange(len(loss)),loss,label=str(m_train[j])+' samples')
-    plt.xlabel('Iterations')
-    plt.ylabel('Prediction Error')
-    plt.title('Prediction error on real data')
-    plt.legend()
-    # plt.savefig('./Real data.png')
-    plt.show()
-
-print(test_loss)
-print(par_est)
-
