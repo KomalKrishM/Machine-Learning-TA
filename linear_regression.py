@@ -6,7 +6,6 @@ Created on Wed Nov 15 14:53:42 2023
 """
 
 import numpy as np
-import matplotlib.backend_bases
 from matplotlib import pyplot as plt
 
 
