@@ -5,119 +5,122 @@ Created on Thu Mar 21 17:05:17 2024
 @author: komal
 """
 
-import matplotlib.pyplot as plt
 import numpy as np
+from keras.datasets import mnist
+import matplotlib.pyplot as plt
 
-# np.random.seed(26)
-###### simulated data ##########
-mean_0 = [-1, -1]
-mean_1 = [1, 1]
-cov = [[1, 0], [0, 10]]
-l = 3
-m = 10000
-y = np.zeros((m,1))
-x = np.zeros((m,l))
 
-for i in range(m):
-  y[i] = np.random.binomial(1, 0.5)
-  if y[i] == 0:
-    x[i,0] = 1
-    x[i,1:] = np.random.multivariate_normal(mean_0, cov)
-    # y[i] = -1
-  else:
-    x[i,0] = 1
-    x[i,1:] = np.random.multivariate_normal(mean_1, cov)
-    # y[i] = 1
-    
-# print(x)
-# print(y)
-# plt.figure()
-# plt.scatter(x_train[:,1],x_train[:,2],c=y_train,marker='x')
-# plt.show()
+def synthetic_data(mean_0, mean_1, cov, m, l):
+    y = np.random.binomial(1, 0.5, (m, 1))
+    x = np.ones((m, l))
+    x[y[:, 0] == 0, 1:] = np.random.multivariate_normal(mean_0, cov, np.sum(y == 0))
+    x[y[:, 0] == 1, 1:] = np.random.multivariate_normal(mean_1, cov, np.sum(y == 1))
+    return x,y
 
-# print(x_train[5])
-# print(y_train[5])
-# X_Train = x_train*y_train
-# print(X_Train[5])
+# Parameter estimation
+def parameter_estimation(x, y):
+    phi_hat = np.sum(y == 1) / len(y)
 
-m_test = 100
-y_test = np.zeros((m_test,1))
-x_test = np.zeros((m_test,l))
-for i in range(m_test):
-  y_test[i] = np.random.binomial(1, 0.5)
-  if y_test[i] == 0:
-    x_test[i,0] = 1
-    x_test[i,1:] = np.random.multivariate_normal(mean_0, cov)
-    # y_test[i] = -1
-  else:
-    x_test[i,0] = 1
-    x_test[i,1:] = np.random.multivariate_normal(mean_1, cov)
-    # y_test[i] = 1
+    mu_0_hat = np.mean(x[y[:, 0] == 0, 1:], axis=0)
+    mu_1_hat = np.mean(x[y[:, 0] == 1, 1:], axis=0)
 
-# plt.figure()
-# plt.scatter(x_test[:,1],x_test[:,2],c=y_test,marker='x')
-# plt.show()
+    sigma2_hat_0 = np.sum((x[y[:, 0] == 0, 1:] - mu_0_hat) ** 2, axis=0)
+    sigma2_hat_1 = np.sum((x[y[:, 0] == 1, 1:] - mu_1_hat) ** 2, axis=0)
+    sigma2_hat   = (sigma2_hat_0 + sigma2_hat_1)/len(y)
+    return phi_hat, mu_0_hat, mu_1_hat, sigma2_hat
 
-# n = 100
-# x_train = [x[0:n,:], x[0:3*n,:], x[0:5*n,:]]
-# y_train = [y[0:n], y[0:3*n], y[0:5*n]]
-# m_train = [x_train[0].shape[0], x_train[1].shape[0], x_train[2].shape[0]]
-
+# Calculate classification accuracy
 def cl_accuracy(y, y_hat):
- return (np.sum(y_hat == y)/y.shape[0])*100
+    return (np.sum(y_hat == y) / y.shape[0]) * 100
 
-phi_hat = np.sum(y == 1)/m
+# Prediction
+def predict(x, mu_0_hat, mu_1_hat, sigma2_hat):
+    x_norm_1 = np.sum((x - mu_1_hat) ** 2 / sigma2_hat, axis=1)
+    x_norm_0 = np.sum((x - mu_0_hat) ** 2 / sigma2_hat, axis=1)
+    return (x_norm_1 < x_norm_0).astype(int)[:,np.newaxis]
 
-y_0_len = np.sum(y==0)
-y_1_len = np.sum(y==1)
+def main_synthetic():
+    mean_0 = [-1, -1]
+    mean_1 = [1, 1]
+    cov    = [[1, 0], [0, 10]]
+    l      = 3
 
-mu_0_hat = 0
-mu_1_hat = 0
+    m_train = 10000
+    m_test  = 100
 
-for i in range(m):
-    if y[i] == 0:
-        mu_0_hat += x[i,1:]
-    elif y[i] == 1:
-        mu_1_hat += x[i,1:]
+    x_train, y_train = synthetic_data(mean_0, mean_1, cov, m_train, l)
+    x_test, y_test   = synthetic_data(mean_0, mean_1, cov, m_test, l)
 
-mu_0_hat /= y_0_len
-mu_1_hat /= y_1_len 
-n = 2
+    phi_hat, mu_0_hat, mu_1_hat, sigma2_hat = parameter_estimation(x_train, y_train)
 
-sigma2_hat = np.zeros((n,1))
-for j in range(sigma2_hat.shape[0]):
-    for i in range(m):
-        if y[i] == 0:
-            sigma2_hat[j,0] += (x[i,j+1] - mean_0[j])**2
-        elif y[i] == 1:
-            sigma2_hat[j,0] += (x[i,j+1] - mean_1[j])**2
-    sigma2_hat[j,0] /= m
-    
-y_pred_train = np.zeros((m,1))
-for i in range(m):
-    x_norm_1 = 0
-    x_norm_0 = 0
-    for j in range(n):
-        x_norm_1 += (x[i,j+1] -mu_1_hat[j])**2/sigma2_hat[j]
-        x_norm_0 += (x[i,j+1] -mu_0_hat[j])**2/sigma2_hat[j]
-    if x_norm_1 < x_norm_0:
-        y_pred_train[i] = 1
+    y_pred_train = predict(x_train[:, 1:], mu_0_hat, mu_1_hat, sigma2_hat)
+    train_acc = cl_accuracy(y_train, y_pred_train)
+
+    y_pred_test = predict(x_test[:, 1:], mu_0_hat, mu_1_hat, sigma2_hat)
+    test_acc = cl_accuracy(y_test, y_pred_test)
+
+    print("Synthetic data - Training Accuracy: {} Test Accuracy: {}".format(train_acc, test_acc))
+
+
+def extract_digits(x, y, d_1, d_2):
+    x_t = {'d_1': [], 'd_2': []}
+    y_t = {'d_1': [], 'd_2': []}
+    for i, d in enumerate(y):
+        if d == d_1:
+            x_t['d_1'].append(x[i].reshape(-1, 1))
+            y_t['d_1'].append(0)
+        elif d == d_2:
+            x_t['d_2'].append(x[i].reshape(-1, 1))
+            y_t['d_2'].append(1)
+    return x_t, y_t
+
+# Prepare data for training and testing
+def prepare_data(data_dict, label_dict):
+    num_samples = len(data_dict['d_1']) + len(data_dict['d_2'])
+    data_matrix = np.ones((num_samples, 785))
+    labels = np.array(label_dict['d_1'] + label_dict['d_2'])[:, np.newaxis] * 1.
+
+    for i in range(num_samples):
+        digit = 'd_1' if i < len(data_dict['d_1']) else 'd_2'
+        data_matrix[i, 1:] = data_dict[digit][i - len(data_dict['d_1'])].T
+
+    return data_matrix, labels
+
+def main_real():
+    # Load MNIST dataset
+    (X_train, Y_train), (X_test, Y_test) = mnist.load_data()
+    d_1, d_2 = 0, 9
+
+    X_Train_0_9, Y_Train_0_9 = extract_digits(X_train, Y_train, d_1, d_2)
+    X_Test_0_9, Y_Test_0_9   = extract_digits(X_test, Y_test, d_1, d_2)
+
+    x_train_0_9, Y_train_0_9 = prepare_data(X_Train_0_9, Y_Train_0_9)
+    x_test_0_9, Y_test_0_9   = prepare_data(X_Test_0_9, Y_Test_0_9)
+
+    # Keep only useful features 
+    train_feature_var = np.var(x_train_0_9, axis = 0)
+    X_train_0_9 = x_train_0_9[:, train_feature_var > 0]
+    X_test_0_9  = x_test_0_9[:, train_feature_var > 0]
+
+    print("Training data shape:", X_train_0_9.shape, Y_train_0_9.shape)
+    print("Testing data shape:", X_test_0_9.shape, Y_test_0_9.shape)
+
+    phi_hat, mu_0_hat, mu_1_hat, sigma2_hat = parameter_estimation(X_train_0_9, Y_train_0_9)
+
+    y_pred_train = predict(X_train_0_9[:, 1:], mu_0_hat, mu_1_hat, sigma2_hat)
+    train_acc = cl_accuracy(y_pred_train, Y_train_0_9)
+
+    y_pred_test = predict(X_test_0_9[:, 1:], mu_0_hat, mu_1_hat, sigma2_hat)
+    test_acc = cl_accuracy(y_pred_test, Y_test_0_9)
+
+    print("Real data - Training Accuracy: {} Test Accuracy: {}".format(train_acc, test_acc))
+
+synthetic = 1
+
+if __name__ == "__main__":
+    if synthetic == 1:
+       main_synthetic()
     else:
-        y_pred_train[i] = 0
-        
-train_acc = cl_accuracy(y_pred_train, y)
+       main_real()
 
-y_pred = np.zeros((m_test,1))
-for i in range(m_test):
-    x_norm_1 = 0
-    x_norm_0 = 0
-    for j in range(n):
-        x_norm_1 += (x_test[i,j+1] -mu_1_hat[j])**2/sigma2_hat[j]
-        x_norm_0 += (x_test[i,j+1] -mu_0_hat[j])**2/sigma2_hat[j]
-    if x_norm_1 < x_norm_0:
-        y_pred[i] = 1
-    else:
-        y_pred[i] = 0
-        
-test_acc = cl_accuracy(y_pred, y_test)
 
