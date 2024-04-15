@@ -9,246 +9,149 @@ Original file is located at
 
 import numpy as np
 from keras.datasets import mnist
-from sklearn.utils import shuffle
+from cvxopt import matrix as cvxopt_matrix, solvers as cvxopt_solvers
 
-##### Real data ######
-(X_train, Y_train),(X_test, Y_test) = mnist.load_data()
+# Extract digits 0 and 9 from the dataset
+def extract_digits(x, y, d_1, d_2):
+    x_t = {'d_1': [], 'd_2': []}
+    y_t = {'d_1': [], 'd_2': []}
+    for i, d in enumerate(y):
+        if d == d_1:
+            x_t['d_1'].append(x[i].reshape(-1, 1))
+            y_t['d_1'].append(-1)
+        elif d == d_2:
+            x_t['d_2'].append(x[i].reshape(-1, 1))
+            y_t['d_2'].append(1)
+    return x_t, y_t
 
-print(X_train.shape)
-print(Y_train.shape)
-print(X_test.shape)
-print(Y_test.shape)
+def prepare_data(data_dict, label_dict):
+    num_samples = len(data_dict['d_1']) + len(data_dict['d_2'])
+    data_matrix = np.ones((num_samples, 785))
+    labels = np.array(label_dict['d_1'] + label_dict['d_2'])[:, np.newaxis] * 1.
 
-X_train_0_9 = {'0':[],'9':[]}
-Y_train_0_9 = {'0':[],'9':[]}
-for i in range(len(Y_train)):
-  if Y_train[i] == 0:
-    X_train_0_9['0'].append(X_train[i].reshape(-1,1))
-    Y_train_0_9['0'].append(-1)
-  elif Y_train[i] == 9:
-    X_train_0_9['9'].append(X_train[i].reshape(-1,1))
-    Y_train_0_9['9'].append(1)
+    for i in range(num_samples):
+        digit = 'd_1' if i < len(data_dict['d_1']) else 'd_2'
+        data_matrix[i, 1:] = data_dict[digit][i - len(data_dict['d_1'])].T
 
-X_test_0_9 = {'0':[],'9':[]}
-Y_test_0_9 = {'0':[],'9':[]}
-for i in range(len(Y_test)):
-  if Y_test[i] == 0:
-    X_test_0_9['0'].append(X_test[i].reshape(-1,1))
-    Y_test_0_9['0'].append(-1)
-  elif Y_test[i] == 9:
-    X_test_0_9['9'].append(X_test[i].reshape(-1,1))
-    Y_test_0_9['9'].append(1)
+    return data_matrix, labels
 
-X_Train_0_9 = np.zeros((len(X_train_0_9['0'])+len(X_train_0_9['9']), 785))
-Y_Train_0_9 = np.array(Y_train_0_9['0']+ Y_train_0_9['9'])[:,np.newaxis]*1.
-X_Test_0_9 = np.zeros((len(X_test_0_9['0'])+len(X_test_0_9['9']), 785))
-Y_Test_0_9 = np.array(Y_test_0_9['0']+ Y_test_0_9['9'])[:,np.newaxis]*1.
-# print(X_Train_0_9)
-# print(Y_Train_0_9.astype(np.float32))
-np.random.seed(24)
+def svm_dual(x, y):
+    # Construct the Kernel matrix
+    H = y*x @ (y*x).T
+    m = x.shape[0]
 
-for i in range(X_Train_0_9.shape[0]):
-  if i <= len(X_train_0_9['0'])-1:
-    X_Train_0_9[i,0] = 1
-    X_Train_0_9[i,1:][np.newaxis] = (X_train_0_9['0'][i]*Y_train_0_9['0'][i]).T
-  elif i >= len(X_train_0_9['0']):
-    X_Train_0_9[i,0] = 1
-    X_Train_0_9[i,1:][np.newaxis] = (X_train_0_9['9'][i-len(X_train_0_9['0'])]*Y_train_0_9['9'][i-len(X_train_0_9['0'])]).T
+    # Convert data into cvxopt format
+    P = cvxopt_matrix(H)
+    q = cvxopt_matrix(-np.ones((m, 1)))
+    G = cvxopt_matrix(-np.eye(m))
+    h = cvxopt_matrix(np.zeros(m))
+    A = cvxopt_matrix(y.T)
+    b = cvxopt_matrix(np.zeros(1))
 
-# np.random.shuffle(X_Train_0_9)
-# np.random.shuffle(Y_Train_0_9)
+    # Run solver
+    sol = cvxopt_solvers.qp(P, q, G, h, A, b)
+    alphas = np.array(sol['x'])
 
-# temp = list(zip(X_Train_0_9, Y_Train_0_9))
-# print(temp)
-# np.random.shuffle(temp)
-# X_Train_0_9, Y_Train_0_9 = zip(*temp)
+    # Calculate the weight vector w
+    w = ((alphas).T @ (y*x)).T
 
-X_Train_0_9, Y_Train_0_9 = shuffle(X_Train_0_9, Y_Train_0_9)
+    # Select support vectors
+    S = (alphas > 1e-4).flatten()
 
-X_Train_0_9 = X_Train_0_9[:800,:]
-Y_Train_0_9 = Y_Train_0_9[:800,:]
+    # Calculate the bias term
+    b = y[S] - np.dot(x[S], w)
+    return w, b
 
-# from matplotlib import pyplot as plt
-# plt.imshow(X_Train_0_9[1].reshape(28,28), cmap='gray')
-# plt.show()
-# print(X_Train_0_9[5].reshape(28,28).shape)
-# print(Y_Train_0_9)
+# Compute classification accuracy
+def cl_accuracy(y, y_hat):
+    return (np.sum(y_hat == y) / y.shape[0]) * 100
 
-for i in range(X_Test_0_9.shape[0]):
-  if i <= len(X_test_0_9['0'])-1:
-    X_Test_0_9[i,0] = 1
-    X_Test_0_9[i,1:][np.newaxis] = (X_test_0_9['0'][i]).T
-  elif i >= len(X_test_0_9['0']):
-    X_Test_0_9[i,0] = 1
-    X_Test_0_9[i,1:][np.newaxis] = (X_test_0_9['9'][i-len(X_test_0_9['0'])]).T
+def main_real():
 
-# np.random.shuffle(X_Test_0_9)
-# np.random.shuffle(Y_Test_0_9)
-# X_Test_0_9 = X_Test_0_9[:500,:]
-# Y_Test_0_9 = Y_Test_0_9[:500,:]
+    # Load MNIST dataset
+    (X_train, Y_train), (X_test, Y_test) = mnist.load_data()
+    d_1, d_2 = 0, 9
 
-print(X_Train_0_9.shape)
-print(Y_Train_0_9.shape)
+    # Extract digits 0 and 9 from training and testing data
+    X_train_0_9, Y_train_0_9 = extract_digits(X_train, Y_train, d_1, d_2)
+    X_test_0_9, Y_test_0_9 = extract_digits(X_test, Y_test, d_1, d_2)
 
-print(X_Test_0_9.shape)
-print(Y_Test_0_9.shape)
+    # Prepare data for training and testing
+    X_Train_0_9, Y_Train_0_9 = prepare_data(X_train_0_9, Y_train_0_9)
+    X_Test_0_9, Y_Test_0_9 = prepare_data(X_test_0_9, Y_test_0_9)
 
-from cvxopt import matrix as cvxopt_matrix
-from cvxopt import solvers as cvxopt_solvers
+    # # Keep only useful features 
+    # train_feature_var = np.var(X_Train_0_9, axis = 0)
+    # X_Train_0_9 = X_Train_0_9[:, train_feature_var > 0]
+    # X_Test_0_9  = X_Test_0_9[:, train_feature_var > 0]
 
-H = X_Train_0_9@X_Train_0_9.T
-m = X_Train_0_9.shape[0]
+    # Shuffle training data
+    # shuffle_index = np.random.permutation(len(Y_Train_0_9))
+    # X_Train_0_9, Y_Train_0_9 = X_Train_0_9[shuffle_index], Y_Train_0_9[shuffle_index]
 
-#Converting into cvxopt format
-P = cvxopt_matrix(H)
-q = cvxopt_matrix(-np.ones((m, 1)))
-G = cvxopt_matrix(-np.eye(m))
-h = cvxopt_matrix(np.zeros(m))
-A = cvxopt_matrix(Y_Train_0_9.T)
-b = cvxopt_matrix(np.zeros(1))
+    w, b = svm_dual(X_Train_0_9, Y_Train_0_9)
 
-#Setting solver parameters (change default to decrease tolerance)
-# cvxopt_solvers.options['show_progress'] = False
-# cvxopt_solvers.options['abstol'] = 1e-10
-# cvxopt_solvers.options['reltol'] = 1e-10
-# cvxopt_solvers.options['feastol'] = 1e-10
+    # Compute predictions
+    y_test_hat = np.sign(X_Test_0_9 @ w) # add bias if not empty
+    y_train_hat = np.sign(X_Train_0_9 @ w) # add bias if not empty
 
-#Run solver
-sol = cvxopt_solvers.qp(P, q, G, h, A, b)
-alphas = np.array(sol['x'])
+    # Calculate accuracies
+    train_accuracy = cl_accuracy(Y_Train_0_9, y_train_hat)
+    test_accuracy = cl_accuracy(Y_Test_0_9, y_test_hat)
 
-print(alphas.shape)
+    # Display results
+    print('Train Accuracy: {} Test Accuracy: {}'.format(train_accuracy, test_accuracy))
 
-#w parameter in vectorized form
-w = ((alphas).T @ X_Train_0_9).T #.reshape(-1,1)
-print(w.shape)
-#Selecting the set of indices S corresponding to non zero parameters
-S = (alphas > 1e-4).flatten()
+# Generate synthetic data
+def synthetic_data(mean_0, mean_1, cov, m, l):
+    y = np.random.binomial(1, 0.5, (m, 1))*1.0
+    x = np.ones((m, l))
+    x[y[:, 0] == 0, 1:] = np.random.multivariate_normal(mean_0, cov, np.sum(y == 0))
+    x[y[:, 0] == 1, 1:] = np.random.multivariate_normal(mean_1, cov, np.sum(y == 1))
+    y[y[:,0] == 0, 0] = -1.0 # extra step only for SVM
+    return x, y
 
-#Computing b
-b = Y_Train_0_9[S] - np.dot(X_Train_0_9[S], w)
+# Iterate over different training data sizes
+def main_synthetic():
 
-# Display results
-print('Alphas = ',alphas[alphas > 1e-4])
-# print('w = ', w.flatten())
-print('b = ', b)
-y_test_hat = np.sign(X_Test_0_9@w)
-y_train_hat = np.sign(Y_Train_0_9*X_Train_0_9@w)
-train_accuracy = (np.sum(y_train_hat == Y_Train_0_9)/y_train_hat.shape[0])*100
-test_accuracy = (np.sum(y_test_hat == Y_Test_0_9)/y_test_hat.shape[0])*100
-print(train_accuracy)
-print(test_accuracy)
+    # Parameters
+    mean_0 = [-3, -3]
+    mean_1 = [2, 2]
+    cov = [[1, 0], [0, 10]]
+    l = 3
+    m_train = 100
+    m_test = 100
 
-print(y_test_hat)
-print(Y_Test_0_9)
+    # Generate train and test data
+    x_train, y_train = synthetic_data(mean_0, mean_1, cov, m_train, l)
+    x_test, y_test = synthetic_data(mean_0, mean_1, cov, m_test, l)
 
-y_test_hat = np.sign(X_Test_0_9@w)
-accuracy = (np.sum(y_test_hat == Y_Test_0_9)/y_test_hat.shape[0])*100
-print(accuracy)
+    # Data visualization
+    plt.figure()
+    plt.scatter(x_train[:,1], x_train[:,2], c=y_train, marker='x')
+    plt.show()
+    plt.figure()
+    plt.scatter(x_test[:,1], x_test[:,2], c=y_test, marker='x')
+    plt.show()
+     
+    w, b = svm_dual(x_train, y_train)
+    print(w.shape)
 
-#### simulated data #####
+    # Compute predictions
+    y_test_hat  = np.sign(x_test @ w + b[0]) # add bias if not empty
+    y_train_hat = np.sign(x_train @ w + b[0]) # add bias if not empty
 
-import matplotlib.pyplot as plt
-import numpy as np
-# np.random.seed(26)
-mean_0 = [-1, -1]
-mean_1 = [1, 1]
-cov = [[1, 0], [0, 10]]
-n = 3
-m_train = 100 #[2*n, 5*n, 10*n]
-# for m in m:
-y_train = np.zeros((m_train,1))
-x_train = np.zeros((m_train,n))
-# x_1 = np.zeros((m[2],n))
-for i in range(m_train):
-  y_train[i] = np.random.binomial(1, 0.5)
-  if y_train[i] == 0:
-    x_train[i,0] = 1
-    x_train[i,1:] = np.random.multivariate_normal(mean_0, cov)
-    y_train[i] = -1
-  else:
-    x_train[i,0] = 1
-    x_train[i,1:] = np.random.multivariate_normal(mean_1, cov)
-    y_train[i] = 1
-# print(x)
-# print(y)
-plt.figure()
-plt.scatter(x_train[:,1],x_train[:,2],c=y_train,marker='x')
-plt.show()
+    # Calculate accuracies
+    train_accuracy = cl_accuracy(y_train, y_train_hat)
+    test_accuracy  = cl_accuracy(y_test, y_test_hat)
 
-# print(x_train[5])
-# print(y_train[5])
-X_Train = x_train*y_train
-# print(X_Train[5])
+    # Display results
+    print('Train Accuracy: {} Test Accuracy: {}'.format(train_accuracy, test_accuracy))
 
-m_test = 100
-y_test = np.zeros((m_test,1))
-x_test = np.zeros((m_test,n))
-for i in range(m_test):
-  y_test[i] = np.random.binomial(1, 0.5)
-  if y_test[i] == 0:
-    x_test[i,0] = 1
-    x_test[i,1:] = np.random.multivariate_normal(mean_0, cov)
-    y_test[i] = -1
-  else:
-    x_test[i,0] = 1
-    x_test[i,1:] = np.random.multivariate_normal(mean_1, cov)
-    y_test[i] = 1
+synthetic = 0
 
-plt.figure()
-plt.scatter(x_test[:,1],x_test[:,2],c=y_test,marker='x')
-plt.show()
-
-from cvxopt import matrix as cvxopt_matrix
-from cvxopt import solvers as cvxopt_solvers
-
-H = X_Train@X_Train.T
-m = x_train.shape[0]
-
-kernel_type = 'rbf'
-#Converting into cvxopt format
-P = cvxopt_matrix(H)
-q = cvxopt_matrix(-np.ones((m, 1)))
-G = cvxopt_matrix(-np.eye(m))
-h = cvxopt_matrix(np.zeros(m))
-A = cvxopt_matrix(y_train.reshape(1,-1))
-b = cvxopt_matrix(np.zeros(1))
-
-#Setting solver parameters (change default to decrease tolerance)
-# cvxopt_solvers.options['show_progress'] = False
-# cvxopt_solvers.options['abstol'] = 1e-10
-# cvxopt_solvers.options['reltol'] = 1e-10
-# cvxopt_solvers.options['feastol'] = 1e-10
-
-#Run solver
-sol = cvxopt_solvers.qp(P, q, G, h, A, b)
-alphas = np.array(sol['x'])
-
-#w parameter in vectorized form
-w = ((y_train * alphas).T @ x_train).reshape(-1,1)
-
-#Selecting the set of indices S corresponding to non zero parameters
-S = (alphas > 1e-4).flatten()
-# print(S)
-# print(y_train[S])
-# print(x_train[S])
-#Computing b
-b = y_train[S] - np.dot(x_train[S], w)
-
-# Display results
-print('Alphas = ',alphas[alphas > 1e-4])
-# print('w = ', w.flatten())
-print('b = ', b)
-
-y_train_hat = np.zeros((m_train,1))
-for i in range(m_train):
-  y_train_hat[i] = np.sign(x_train[i]@w + b[0])
-
-y_test_hat = np.zeros((m_test,1))
-for i in range(m_test):
-  y_test_hat[i] = np.sign(x_test[i]@w + b[0])
-
-train_accuracy = (np.sum(y_train_hat == y_train)/y_train_hat.shape[0])*100
-test_accuracy = (np.sum(y_test_hat == y_test)/y_test_hat.shape[0])*100
-print(train_accuracy)
-print(test_accuracy)
+if __name__ == "__main__":
+   if synthetic == 1:
+      main_synthetic()
+   else:
+      main_real()
