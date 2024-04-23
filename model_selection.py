@@ -7,7 +7,7 @@ Created on Tue Apr 16 15:13:20 2024
 
 import numpy as np
 from matplotlib import pyplot as plt
-# from sklearn import linear_model
+from sklearn import linear_model
 
 def synthetic_data(theta, d, m):
     var = 0.01*np.linalg.norm(theta)**2
@@ -78,6 +78,7 @@ def main_synthetic():
     theta_sparse[1:] = np.random.binomial(1, 0.5, (d,1))*np.random.randn(d,1)
     
     x_lasso, y_lasso = synthetic_data(theta_sparse, d, m)
+    x_t_lasso, y_t_lasso = synthetic_data(theta_sparse, d, m)
     
     c     = 0.05
     eps   = 1e-6
@@ -98,11 +99,46 @@ def main_synthetic():
     theta_dense_est = least_squares_ridge(x_lasso, y_lasso, lamda)
     dense_loss      = np.linalg.norm(theta_sparse-theta_dense_est)**2/np.linalg.norm(theta_sparse)**2
     
-    ###### dense features #######
+    ###### sk-learn on sparse data ####### 
+    reg = linear_model.LinearRegression()
+    reg_lasso = linear_model.Lasso(alpha=0.1)
+    reg_ridge = linear_model.Ridge(alpha=0.1)
+    
+    reg.fit(x_lasso, y_lasso)
+    reg_lasso.fit(x_lasso, y_lasso)
+    reg_ridge.fit(x_lasso, y_lasso)
+    
+    theta = reg.coef_.T
+    theta_lasso = reg_lasso.coef_[np.newaxis,:].T
+    theta_ridge = reg_ridge.coef_.T
+    print(theta_ridge.shape)
+    
+    reg_par_loss = np.linalg.norm(theta-theta_sparse)**2/np.linalg.norm(theta_sparse)**2
+    reg_lasso_par_loss = np.linalg.norm(theta_lasso-theta_sparse)**2/np.linalg.norm(theta_sparse)**2
+    reg_ridge_par_loss = np.linalg.norm(theta_ridge-theta_sparse)**2/np.linalg.norm(theta_sparse)**2
+    
+    print('reg_par_loss {}'.format(reg_par_loss))
+    print('reg_lasso_par_loss {}'.format(reg_lasso_par_loss))
+    print('reg_ridge_par_loss {}'.format(reg_ridge_par_loss))
+    
+    reg_pred = x_t_lasso@theta
+    reg_lasso_pred = x_t_lasso@theta_lasso
+    reg_ridge_pred = x_t_lasso@theta_ridge
+    
+    reg_pred_loss = np.linalg.norm(reg_pred-y_t_lasso)**2/np.linalg.norm(y_t_lasso)**2
+    reg_lasso_pred_loss = np.linalg.norm(reg_lasso_pred-y_t_lasso)**2/np.linalg.norm(y_t_lasso)**2
+    reg_ridge_pred_loss = np.linalg.norm(reg_ridge_pred-y_t_lasso)**2/np.linalg.norm(y_t_lasso)**2    
+    
+    print('reg_pred_loss {}'.format(reg_pred_loss))
+    print('reg_lasso_pred_loss {}'.format(reg_lasso_pred_loss))
+    print('reg_ridge_pred_loss {}'.format(reg_ridge_pred_loss))
+    
+    # ###### dense features #######
     theta_dense = np.ones((d+1,1))
     theta_dense[1:] = np.random.randn(d,1)
     
     x_ridge, y_ridge = synthetic_data(theta_dense, d, m)
+    x_t_ridge, y_t_ridge = synthetic_data(theta_dense, d, m)
     
     c     = 0.01
     eps   = 1e-6
@@ -122,7 +158,42 @@ def main_synthetic():
     lamda = 0.01
     theta_dense_est = least_squares_ridge(x_ridge, y_ridge, lamda)
     dense_loss      = np.linalg.norm(theta_dense-theta_dense_est)**2/np.linalg.norm(theta_dense)**2
-        
+    print('Dense loss {}'.format(dense_loss))
+    
+    ###### sk-learn on dense data####### 
+    reg = linear_model.LinearRegression()
+    reg_lasso = linear_model.Lasso(alpha=0.1)
+    reg_ridge = linear_model.Ridge(alpha=0.1)
+    
+    reg.fit(x_ridge, y_ridge)
+    reg_lasso.fit(x_ridge, y_ridge)
+    reg_ridge.fit(x_ridge, y_ridge)
+    
+    theta = reg.coef_.T
+    theta_lasso = reg_lasso.coef_[np.newaxis,:].T
+    theta_ridge = reg_ridge.coef_.T
+    print(theta_ridge.shape)
+    
+    reg_par_loss = np.linalg.norm(theta-theta_dense)**2/np.linalg.norm(theta_dense)**2
+    reg_lasso_par_loss = np.linalg.norm(theta_lasso-theta_dense)**2/np.linalg.norm(theta_dense)**2
+    reg_ridge_par_loss = np.linalg.norm(theta_ridge-theta_dense)**2/np.linalg.norm(theta_dense)**2
+    
+    print('reg_par_loss {}'.format(reg_par_loss))
+    print('reg_lasso_par_loss {}'.format(reg_lasso_par_loss))
+    print('reg_ridge_par_loss {}'.format(reg_ridge_par_loss))
+    
+    reg_pred = x_t_ridge@theta
+    reg_lasso_pred = x_t_ridge@theta_lasso
+    reg_ridge_pred = x_t_ridge@theta_ridge
+    
+    reg_pred_loss = np.linalg.norm(reg_pred-y_t_ridge)**2/np.linalg.norm(y_t_ridge)**2
+    reg_lasso_pred_loss = np.linalg.norm(reg_lasso_pred-y_t_ridge)**2/np.linalg.norm(y_t_ridge)**2
+    reg_ridge_pred_loss = np.linalg.norm(reg_ridge_pred-y_t_ridge)**2/np.linalg.norm(y_t_ridge)**2    
+    
+    print('reg_pred_loss {}'.format(reg_pred_loss))
+    print('reg_lasso_pred_loss {}'.format(reg_lasso_pred_loss))
+    print('reg_ridge_pred_loss {}'.format(reg_ridge_pred_loss))
+
 ###### Real data #######
 def main_real():        
         
@@ -141,6 +212,7 @@ def main_real():
     
     y_pred_dense = x_train@theta_dense_est
     training_error_dense = np.linalg.norm(y_pred_dense - y_train)**2/np.linalg.norm(y_train)**2
+    print('training error on ridge model {}'.format(training_error_dense))
     
     c     = 0.000000005
     eps   = 1e-6
@@ -157,6 +229,22 @@ def main_real():
     # plt.title('')
     plt.show()
     
+    ###### sk-learn on real data####### 
+    reg = linear_model.LinearRegression()
+    reg_lasso = linear_model.Lasso(alpha=0.1)
+    reg_ridge = linear_model.Ridge(alpha=0.1)
+    
+    reg.fit(x_train, y_train)
+    reg_lasso.fit(x_train, y_train)
+    reg_ridge.fit(x_train, y_train)
+    
+    theta = reg.coef_.T
+    theta_lasso = reg_lasso.coef_[np.newaxis,:].T
+    theta_ridge = reg_ridge.coef_.T
+    print(theta.shape)
+    
+    ####### testing #######
+    
     file_path_3 = "C:/Users/user/Downloads/blogfeedback/blogData_test-2012.02.03.00_00.csv"
     test_data   = np.array([np.array(line.split(sep=',')).astype(float) for line in open(file_path_3).readlines()])
     
@@ -165,9 +253,23 @@ def main_real():
     
     y_test_dense_pred = x_test@theta_dense_est
     test_error_dense  = np.linalg.norm(y_test_dense_pred - y_test)**2/np.linalg.norm(y_test)**2
+    print('test error on ridge model {}'.format(test_error_dense))
     
     y_test_sparse_pred = x_test@theta_sparse_est
     test_error_sparse  = np.linalg.norm(y_test_sparse_pred - y_test)**2/np.linalg.norm(y_test)**2
+    print('test error on lasso model {}'.format(test_error_sparse))
+    
+    reg_pred = x_test@theta
+    reg_lasso_pred = x_test@theta_lasso
+    reg_ridge_pred = x_test@theta_ridge
+    
+    reg_pred_loss = np.linalg.norm(reg_pred-y_test)**2/np.linalg.norm(y_test)**2
+    reg_lasso_pred_loss = np.linalg.norm(reg_lasso_pred-y_test)**2/np.linalg.norm(y_test)**2
+    reg_ridge_pred_loss = np.linalg.norm(reg_ridge_pred-y_test)**2/np.linalg.norm(y_test)**2    
+    
+    print('reg_pred_loss {}'.format(reg_pred_loss))
+    print('reg_lasso_pred_loss {}'.format(reg_lasso_pred_loss))
+    print('reg_ridge_pred_loss {}'.format(reg_ridge_pred_loss))
 
 synthetic = 0
 
@@ -176,4 +278,3 @@ if __name__ == "__main__":
         main_synthetic()
     else:
         main_real()
-
